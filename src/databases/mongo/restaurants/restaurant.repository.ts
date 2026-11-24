@@ -9,15 +9,13 @@ import {
     RestaurantSearchResult,
 } from '../../../modules/restaurants/restaurant.entity';
 import { MongoService } from '../mongo.service';
+import { CASE_INSENSITIVE } from './restaurant.indexes';
 import {
     RestaurantDocument,
     toEntity,
     toPersistence,
 } from './restaurant.mapper';
 import { Restaurant } from './restaurant.schema';
-
-// Must match the collation of the indexes built by scripts/ingest.ts.
-const CASE_INSENSITIVE = { locale: 'en', strength: 2 };
 
 @Injectable()
 export class RestaurantRepository {
@@ -102,7 +100,7 @@ function buildFilter(query: RestaurantQuery): QueryFilter<Restaurant> {
         filter.name = { $regex: escapeRegex(query.name), $options: 'i' };
     }
     // Plain equality: case-insensitive through CASE_INSENSITIVE, and able to
-    // use the collation indexes created by the ingestion script.
+    // use the collation indexes from restaurant.indexes.ts.
     if (query.city) {
         filter['location.city'] = query.city;
     }

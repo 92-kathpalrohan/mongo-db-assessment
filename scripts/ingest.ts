@@ -7,6 +7,7 @@ import {
     Restaurant,
     RestaurantSchema,
 } from '../src/databases/mongo/restaurants/restaurant.schema';
+import { ensureRestaurantIndexes } from '../src/databases/mongo/restaurants/restaurant.indexes';
 
 // Country names from Kaggle's Country-Code.xlsx; currencies are ISO 4217
 // codes. The CSV's Currency column is ambiguous ("$" for five countries),
@@ -103,19 +104,7 @@ async function main(): Promise<void> {
     );
     const RestaurantModel = mongoose.model(Restaurant.name, RestaurantSchema);
 
-    await RestaurantModel.createIndexes();
-    await RestaurantModel.collection.createIndex({
-        'location.coordinates': '2dsphere',
-    });
-    // Case-insensitive equality filters. Queries must run with the same
-    // collation (CASE_INSENSITIVE in the repository) to use these.
-    const caseInsensitive = { locale: 'en', strength: 2 };
-    for (const field of ['cuisines', 'location.city', 'location.country']) {
-        await RestaurantModel.collection.createIndex(
-            { [field]: 1 },
-            { collation: caseInsensitive },
-        );
-    }
+    await ensureRestaurantIndexes(RestaurantModel);
 
     let read = 0;
     let inserted = 0;
