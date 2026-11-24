@@ -1,0 +1,39 @@
+services:
+    mongodb:
+        image: mongodb/mongodb-atlas-local
+        ports:
+            - '27017:27017'
+        volumes:
+            - mongodb_data:/data/db
+
+    seed:
+        build: .
+        command: npx ts-node scripts/ingest.ts data/zomato.csv
+        environment:
+            NODE_ENV: local
+            MONGODB__HOST: mongodb:27017
+            MONGODB__DATABASE: mdb_assess
+            SERVICE__API_KEY: testing
+        depends_on:
+            mongodb:
+                condition: service_healthy
+        restart: 'no'
+
+    api:
+        build: .
+        command: node dist/main
+        ports:
+            - '3000:3000'
+        environment:
+            NODE_ENV: local
+            MONGODB__HOST: mongodb:27017
+            MONGODB__DATABASE: mdb_assess
+            SERVICE__API_KEY: testing
+        depends_on:
+            mongodb:
+                condition: service_healthy
+            seed:
+                condition: service_completed_successfully
+
+volumes:
+    mongodb_data:
