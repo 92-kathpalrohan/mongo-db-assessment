@@ -143,7 +143,7 @@ export function toRestaurantListItem({
 }
 
 // Rating -> display label and colour, shared by every response.
-function toRatingLabel(averageRating?: number): {
+export function toRatingLabel(averageRating?: number): {
     ratingText: string;
     ratingColor: string;
 } {

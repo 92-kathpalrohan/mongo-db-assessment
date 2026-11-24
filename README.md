@@ -28,6 +28,12 @@ docker compose logs seed
 
 ## Testing
 
+Unit tests (no database needed):
+
+```bash
+npm test
+```
+
 End-to-end tests run against the Docker MongoDB, in a separate
 `mdb_assess_test` database that they create and drop themselves.
 
