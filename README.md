@@ -1,30 +1,97 @@
-# mongo-db-assessment
+# Restaurant Discovery API
 
-## Running locally
+MVP of the customer-facing restaurant discovery backend for BiteExpress, built
+with NestJS and MongoDB on the Zomato restaurants dataset.
+
+## Quick start
 
 ```bash
 docker compose up -d --build
 ```
 
-Starts three services:
+| Service   | What it does                                                                                          |
+| --------- | ----------------------------------------------------------------------------------------------------- |
+| `mongodb` | MongoDB Atlas Local (Atlas Search and Vector Search available locally)                                |
+| `seed`    | Imports `data/zomato.csv` once, then exits. Safe to re-run: rows are upserted on `zomatoRestaurantId` |
+| `api`     | The API on http://localhost:3000, started after the import finishes                                   |
 
-- `mongodb`: MongoDB Atlas Local
-- `seed`: imports `data/zomato.csv` once, then exits (re-runs are safe: rows
-  are upserted on `zomatoRestaurantId`)
-- `api`: the NestJS API on http://localhost:3000, started after the import
-  finishes
+Open http://localhost:3000/docs, click **Authorize** and enter `testing` (the
+demo `x-api-key` from `docker-compose.yml`).
 
-API docs: http://localhost:3000/docs. Click **Authorize** and enter
-`testing` (the demo `x-api-key` set in `docker-compose.yml`).
+> Always pass `--build` after changing code, otherwise Compose reuses the old
+> image.
 
-> Always pass `--build` after changing code. Without it, Compose reuses the
-> existing image and runs the old code.
+Check the import: `docker compose logs seed`.
 
-Check the import:
+## Endpoints
+
+All `/v1/restaurants` routes require the `x-api-key` header. `/hc` is open.
+
+| Method | Path                     | Description                                    |
+| ------ | ------------------------ | ---------------------------------------------- |
+| `POST` | `/v1/restaurants`        | Create a restaurant; returns the full record   |
+| `GET`  | `/v1/restaurants/{id}`   | Full details; 404 for unknown or malformed ids |
+| `GET`  | `/v1/restaurants`        | Listing with filters, sorting and pagination   |
+| `GET`  | `/v1/restaurants/search` | _Planned:_ natural-language search             |
+
+Listing parameters: `name` (contains), `city`, `country`, `cuisines`
+(comma-separated, any of), `minRating`, `maxCostForTwo`, `lat` + `lng`,
+`sortBy` (`rating` | `distance` | `name` | `cost`), `order`, `limit` (max
+100), `offset`. Default sort: rating, highest first, unrated last. `city`,
+`country` and `cuisines` match case-insensitively.
 
 ```bash
-docker compose logs seed
+curl -H 'x-api-key: testing' \
+  'http://localhost:3000/v1/restaurants?name=vada%20pav&lat=28.4595&lng=77.0266&sortBy=distance'
 ```
+
+Each listing item has the fields the brief asks for (id, name, address, city,
+country, cuisines, average rating, distance in km when `lat`/`lng` are sent),
+plus cost for two with its currency and a rating label and colour.
+
+## Architecture
+
+```
+controllers/  HTTP: DTOs, validation, request/response mappers
+modules/      domain: RestaurantEntity, RestaurantsService (no HTTP, no Mongoose)
+databases/    persistence: schema, repository, MongoService, entity <-> document mapper
+```
+
+- Each boundary has its own type and mapper, so API changes and storage
+  changes don't leak into each other.
+- `MongoModule` exports only repositories: nothing outside it can reach a
+  Mongoose model directly.
+- Mongoose schema validation runs on every write, including the ingestion
+  script, which uses the same model.
+
+## Data model and cleanup
+
+One `restaurants` collection. Decisions made while importing the CSV:
+
+| Source issue                                                                                      | Decision                                                                               |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 499 rows with longitude or latitude of 0                                                          | `location.coordinates` omitted: unknown, not a point in the ocean                      |
+| Rating 0 means "Not rated" (2,148 rows)                                                           | `averageRating` omitted, so `$avg` and filters stay correct                            |
+| Rating text and colour columns                                                                    | Not stored; derived from the rating at response time (matches the source for all rows) |
+| `Locality Verbose` is locality + city                                                             | Dropped                                                                                |
+| Country only as a numeric code                                                                    | Name from Kaggle's country-code table                                                  |
+| Currency column ambiguous (`$` for five countries), garbled for the UK, wrong for the Philippines | ISO 4217 code derived from the country                                                 |
+| Zomato's `Restaurant ID`                                                                          | Kept as `zomatoRestaurantId` (source reference); the public id is MongoDB's `_id`      |
+| 246 rows with garbled characters in the source file                                               | Imported as is                                                                         |
+
+Indexes (created by the ingestion script and the tests, from
+`restaurant.indexes.ts`): 2dsphere on `location.coordinates`, case-insensitive
+collation indexes on `cuisines`, `location.city` and `location.country`, and a
+partial unique index on `zomatoRestaurantId`.
+
+## Known trade-offs
+
+- Sending `lat`/`lng` uses `$geoNear`, which only returns restaurants with
+  coordinates.
+- Cost compares raw amounts; combine cost filters and sorting with `city` or
+  `country`.
+- `name` is a case-insensitive "contains" regex and can't use an index.
+- `limit`/`offset` pagination; a cursor would scale better for deep pages.
 
 ## Testing
 
@@ -45,3 +112,8 @@ npm run test:e2e
 
 Node 24.9+ is required: Jest loads Nest 12's ESM-only packages through
 `require(esm)`, which older Node versions don't support.
+
+## Tools and AI disclosure
+
+Built with the assistance of Claude Code (Anthropic) for guidance, code
+generation and review. All design decisions were discussed and made by me.
