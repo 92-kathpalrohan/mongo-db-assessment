@@ -25,3 +25,17 @@ Check the import:
 ```bash
 docker compose logs seed
 ```
+
+## Testing
+
+End-to-end tests run against the Docker MongoDB, in a separate
+`mdb_assess_test` database that they create and drop themselves.
+
+```bash
+nvm use                         # Node 24.9+ (see .nvmrc)
+docker compose up -d mongodb
+npm run test:e2e
+```
+
+Node 24.9+ is required: Jest loads Nest 12's ESM-only packages through
+`require(esm)`, which older Node versions don't support.
