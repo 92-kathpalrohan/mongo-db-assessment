@@ -6,6 +6,7 @@ import {
 } from '../../../modules/restaurants/restaurant.entity';
 import { NOT_RATED, RATING_BANDS } from '../../../common/constants';
 import { CreateRestaurantDto } from './create-restaurant.dto';
+import { ParsedSearch } from '../../../modules/restaurants/search-query.parser';
 import { ListRestaurantsDto } from './list-restaurants.dto';
 import {
     RestaurantListItemDto,
@@ -116,6 +117,36 @@ export function toNewRestaurantEntity(
         // A new restaurant has no votes and no rating yet.
         ratings: { totalVotes: 0 },
     };
+}
+
+// Search request + filters parsed from q -> domain query. Explicit
+// parameters win over parsed ones; defaults are applied afterwards.
+export function toSearchQuery(
+    dto: ListRestaurantsDto,
+    parsed: ParsedSearch,
+): RestaurantQuery {
+    let parsedSortBy = parsed.sortBy;
+    // "Nearest" means nothing without the caller's position.
+    if (
+        parsedSortBy === 'distance' &&
+        (dto.lat === undefined || dto.lng === undefined)
+    ) {
+        parsedSortBy = undefined;
+    }
+    return toRestaurantQuery({
+        name: dto.name ?? parsed.name,
+        city: dto.city ?? parsed.city,
+        country: dto.country,
+        cuisines: dto.cuisines ?? parsed.cuisines,
+        minRating: dto.minRating,
+        maxCostForTwo: dto.maxCostForTwo ?? parsed.maxCostForTwo,
+        lat: dto.lat,
+        lng: dto.lng,
+        sortBy: dto.sortBy ?? parsedSortBy,
+        order: dto.order,
+        limit: dto.limit,
+        offset: dto.offset,
+    });
 }
 
 // Listing result -> response row. Distance goes from metres to kilometres.

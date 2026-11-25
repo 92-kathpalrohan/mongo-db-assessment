@@ -13,6 +13,7 @@ import { ApiKeyGuard } from '../common/guards/api-key.guard';
 import { RestaurantsService } from '../modules/restaurants/restaurants.service';
 import { CreateRestaurantDto } from './dtos/restaurant/create-restaurant.dto';
 import { ListRestaurantsDto } from './dtos/restaurant/list-restaurants.dto';
+import { SearchRestaurantsDto } from './dtos/restaurant/search-restaurants.dto';
 import {
     RestaurantListResponseDto,
     RestaurantResponseDto,
@@ -22,6 +23,7 @@ import {
     toRestaurantListItem,
     toRestaurantQuery,
     toRestaurantResponse,
+    toSearchQuery,
 } from './dtos/restaurant/restaurant.mapper';
 
 @UseGuards(ApiKeyGuard)
@@ -45,6 +47,21 @@ export class RestaurantsController {
         @Query() dto: ListRestaurantsDto,
     ): Promise<RestaurantListResponseDto> {
         const query = toRestaurantQuery(dto);
+        const results = await this.restaurantsService.list(query);
+        return {
+            items: results.map(toRestaurantListItem),
+            limit: query.limit,
+            offset: query.offset,
+        };
+    }
+
+    // Declared before :id, otherwise "search" would be treated as an id.
+    @Get('search')
+    async search(
+        @Query() dto: SearchRestaurantsDto,
+    ): Promise<RestaurantListResponseDto> {
+        const parsed = await this.restaurantsService.parseSearch(dto.q);
+        const query = toSearchQuery(dto, parsed);
         const results = await this.restaurantsService.list(query);
         return {
             items: results.map(toRestaurantListItem),

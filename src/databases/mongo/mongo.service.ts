@@ -36,4 +36,14 @@ export class MongoService {
         }
         return aggregation.exec();
     }
+
+    async distinct({
+        model,
+        field,
+    }: {
+        model: Model<any>;
+        field: string;
+    }): Promise<unknown[]> {
+        return model.distinct(field).exec();
+    }
 }

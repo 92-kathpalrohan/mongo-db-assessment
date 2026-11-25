@@ -309,6 +309,54 @@ describe('Restaurants API (e2e)', () => {
         });
     });
 
+    describe('GET /v1/restaurants/search', () => {
+        const searchItems = async (q: string, extra = '') => {
+            const res = await api()
+                .get(
+                    `/v1/restaurants/search?q=${encodeURIComponent(q)}${extra}`,
+                )
+                .set('x-api-key', API_KEY)
+                .expect(200);
+            return (res.body as { items: ListItem[] }).items;
+        };
+
+        it('understands city, cuisine and "best"', async () => {
+            expect(
+                names(
+                    await searchItems(
+                        'Best restaurants in Gurgaon with South Indian Food',
+                    ),
+                ),
+            ).toEqual(['Alpha Dosa']);
+        });
+
+        it('understands a budget for two', async () => {
+            expect(
+                names(
+                    await searchItems(
+                        'Restaurants in Gurgaon under Rs. 1000 for two',
+                    ),
+                ),
+            ).toEqual(['Alpha Dosa', 'Bravo Biryani', 'Charlie Chaat']);
+        });
+
+        it('sorts "nearest" by distance from the caller', async () => {
+            const items = await searchItems(
+                'Nearest place that serves chaat',
+                `&lat=${HERE.lat}&lng=${HERE.lng}`,
+            );
+            expect(names(items)).toEqual(['Charlie Chaat']);
+            expect(typeof items[0].distanceKm).toBe('number');
+        });
+
+        it('requires q', async () => {
+            await api()
+                .get('/v1/restaurants/search')
+                .set('x-api-key', API_KEY)
+                .expect(400);
+        });
+    });
+
     describe('GET /v1/restaurants: pagination', () => {
         it('returns non-overlapping pages', async () => {
             const first = names(await list('limit=3&offset=0'));

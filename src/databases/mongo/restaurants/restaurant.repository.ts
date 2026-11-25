@@ -45,6 +45,29 @@ export class RestaurantRepository {
         return doc ? toEntity(doc) : null;
     }
 
+    // Known cities and cuisines, for parsing natural-language searches.
+    async searchVocabulary(): Promise<{
+        cities: string[];
+        cuisines: string[];
+    }> {
+        const [cities, cuisines] = await Promise.all([
+            this.mongoService.distinct({
+                model: this.model,
+                field: 'location.city',
+            }),
+            this.mongoService.distinct({
+                model: this.model,
+                field: 'cuisines',
+            }),
+        ]);
+        return {
+            cities: cities.filter((v): v is string => typeof v === 'string'),
+            cuisines: cuisines.filter(
+                (v): v is string => typeof v === 'string',
+            ),
+        };
+    }
+
     async list(query: RestaurantQuery): Promise<RestaurantSearchResult[]> {
         const filter = buildFilter(query);
         const sortOrder = query.order === 'asc' ? 1 : -1;

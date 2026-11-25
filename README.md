@@ -23,6 +23,10 @@ demo `x-api-key` from `docker-compose.yml`).
 
 Check the import: `docker compose logs seed`.
 
+The database isn't persisted: whenever the containers are recreated, MongoDB
+starts fresh and the seed re-imports the data, so restaurants created through
+`POST` don't survive a recreate.
+
 ## Endpoints
 
 All `/v1/restaurants` routes require the `x-api-key` header. `/hc` is open.
@@ -32,7 +36,7 @@ All `/v1/restaurants` routes require the `x-api-key` header. `/hc` is open.
 | `POST` | `/v1/restaurants`        | Create a restaurant; returns the full record   |
 | `GET`  | `/v1/restaurants/{id}`   | Full details; 404 for unknown or malformed ids |
 | `GET`  | `/v1/restaurants`        | Listing with filters, sorting and pagination   |
-| `GET`  | `/v1/restaurants/search` | _Designed, not implemented_ (see below)        |
+| `GET`  | `/v1/restaurants/search` | Natural-language search (see below)            |
 
 Listing parameters: `name` (contains), `city`, `country`, `cuisines`
 (comma-separated, any of), `minRating`, `maxCostForTwo`, `lat` + `lng`,
@@ -49,25 +53,35 @@ Each listing item has the fields the brief asks for (id, name, address, city,
 country, cuisines, average rating, distance in km when `lat`/`lng` are sent),
 plus cost for two with its currency and a rating label and colour.
 
-## Natural-language search (designed, not implemented)
+## Natural-language search
 
-`GET /v1/restaurants/search?q=...` was deprioritized to deliver a tested core.
-The listing endpoint already answers the brief's examples in structured form
-(e.g. `city=Gurgaon&cuisines=South Indian`, `maxCostForTwo=1000`,
-`name=vada pav&sortBy=distance`). The design:
+`GET /v1/restaurants/search?q=...` accepts a sentence plus any listing
+parameter (`lat`/`lng`, `limit`, ...). The query is parsed into the listing's
+filters and runs through the same query path as `GET /v1/restaurants`.
 
-1. An LLM turns `q` into the listing's query DTO using structured output (a
-   JSON schema mirroring `ListRestaurantsDto`), given the known cuisines and
-   cities so it returns canonical values.
-2. The result goes through the same class-validator rules, then the same
-   `toRestaurantQuery` → repository path as `GET /v1/restaurants`. The caller's
-   `lat`/`lng` come from the request, never from the LLM.
-3. Fallback when the LLM is unavailable or returns invalid output: treat `q` as
-   a `name` search, so the endpoint degrades instead of failing.
-4. Upgrade path: Atlas Search (`$search`, available in the Atlas Local image)
-   for typo-tolerant, relevance-ranked text matching. Since `$search` and
-   `$geoNear` must both be the first stage, distance would then be computed in
-   a later stage.
+```bash
+curl -G -H 'x-api-key: testing' 'http://localhost:3000/v1/restaurants/search' \
+  --data-urlencode 'q=Nearest place that serves Vada Pav' \
+  --data-urlencode 'lat=28.4595' --data-urlencode 'lng=77.0266'
+```
+
+The parser is deterministic and vocabulary-based:
+
+- Known cities and cuisines are loaded from the data (`distinct`, cached) and
+  matched as whole phrases, longest first ("New Delhi" before "Delhi").
+- "under Rs. 1000" / "below ₹500" becomes `maxCostForTwo`; "best" / "top"
+  sorts by rating; "nearest" / "near me" sorts by distance (only when
+  `lat`/`lng` are sent).
+- Remaining words, minus filler words, become a name search, so dishes that
+  appear in restaurant names work ("Vada Pav").
+- Explicit query parameters take precedence over parsed ones.
+
+Limits: open-ended phrasing ("somewhere cosy") and dishes that never appear in
+restaurant names (the dataset has no menus) aren't understood. Upgrade path:
+an LLM with structured output mapping `q` to the same filters (validated by
+the same DTO rules, with this parser as the fallback), Atlas Search for
+typo-tolerant, relevance-ranked text, and Vector Search for meaning-based
+matching. All of these are available in the Atlas Local image.
 
 ## Architecture
 
