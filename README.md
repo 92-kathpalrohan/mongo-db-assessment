@@ -32,7 +32,7 @@ All `/v1/restaurants` routes require the `x-api-key` header. `/hc` is open.
 | `POST` | `/v1/restaurants`        | Create a restaurant; returns the full record   |
 | `GET`  | `/v1/restaurants/{id}`   | Full details; 404 for unknown or malformed ids |
 | `GET`  | `/v1/restaurants`        | Listing with filters, sorting and pagination   |
-| `GET`  | `/v1/restaurants/search` | _Planned:_ natural-language search             |
+| `GET`  | `/v1/restaurants/search` | _Designed, not implemented_ (see below)        |
 
 Listing parameters: `name` (contains), `city`, `country`, `cuisines`
 (comma-separated, any of), `minRating`, `maxCostForTwo`, `lat` + `lng`,
@@ -48,6 +48,26 @@ curl -H 'x-api-key: testing' \
 Each listing item has the fields the brief asks for (id, name, address, city,
 country, cuisines, average rating, distance in km when `lat`/`lng` are sent),
 plus cost for two with its currency and a rating label and colour.
+
+## Natural-language search (designed, not implemented)
+
+`GET /v1/restaurants/search?q=...` was deprioritized to deliver a tested core.
+The listing endpoint already answers the brief's examples in structured form
+(e.g. `city=Gurgaon&cuisines=South Indian`, `maxCostForTwo=1000`,
+`name=vada pav&sortBy=distance`). The design:
+
+1. An LLM turns `q` into the listing's query DTO using structured output (a
+   JSON schema mirroring `ListRestaurantsDto`), given the known cuisines and
+   cities so it returns canonical values.
+2. The result goes through the same class-validator rules, then the same
+   `toRestaurantQuery` → repository path as `GET /v1/restaurants`. The caller's
+   `lat`/`lng` come from the request, never from the LLM.
+3. Fallback when the LLM is unavailable or returns invalid output: treat `q` as
+   a `name` search, so the endpoint degrades instead of failing.
+4. Upgrade path: Atlas Search (`$search`, available in the Atlas Local image)
+   for typo-tolerant, relevance-ranked text matching. Since `$search` and
+   `$geoNear` must both be the first stage, distance would then be computed in
+   a later stage.
 
 ## Architecture
 
