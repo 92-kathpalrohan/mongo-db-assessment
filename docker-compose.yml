@@ -3,8 +3,9 @@ services:
         image: mongodb/mongodb-atlas-local
         ports:
             - '27017:27017'
-        volumes:
-            - mongodb_data:/data/db
+        # No volumes: the database starts fresh whenever the container is recreated,
+        # and the seed service re-imports the data. Persisting Atlas Local's /data/configdb
+        # needs extra permission setup, so the demo stays ephemeral.
 
     seed:
         build: .
@@ -34,6 +35,3 @@ services:
                 condition: service_healthy
             seed:
                 condition: service_completed_successfully
-
-volumes:
-    mongodb_data:
